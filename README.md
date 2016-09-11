@@ -2,6 +2,10 @@
 Simple preliminary version of an autoscaler for Marathon using metrics from InfluxDB. Inspired by https://github.com/tendrilinc/marathon-autoscaler.
 Resource metrics (CPU, memory, network, diskio etc) as well as application metrics from cAdvisor can be used.
 
+How it works:
+* A metrics collector is run on each Mesos agent. This queries cAdvisor and the local Mesos agent API and inserts metrics into InfluxDB tagged by the Mesos application name and task ID. Any labels which have been added to applications are also included as tags.
+* An autoscaling script regularly queries Marathon and searches for any applications which have special environment variables defined which specify autoscaling rules. It then makes use of metrics from InfluxDB in order to decide whether to scale each application.
+
 Prerequisites:
 * Requires cAdvisor to be running on each Mesos agent.
 
