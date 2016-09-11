@@ -23,3 +23,5 @@ Environment variables are used in the Marathon application specification to spec
 In this example autoscaling is enabled with a minimum of 2 instances and maximum of 8 instances.
 The metrics for the rule `memory` are obtained from the field `total` from the `memory` measurement in the InfluxDB database.
 A target value of `1000` averaged across all instances over the past 180s is used. After scaling it backs off for 120s.
+
+Multiple rules can be specified for each application but in each iteration an application can only be scaled once and cannot be scaled again until the backoff time period expires.
