@@ -1,0 +1,173 @@
+#!/usr/bin/python
+
+import os.path
+import sys
+import socket
+import requests
+from ConfigParser import SafeConfigParser
+from datetime import datetime
+from subprocess import Popen, PIPE
+
+# Exit if another instance of this script is already running
+sub_proc = Popen(['ps', 'aux'], shell=False, stdout=PIPE)
+sub_proc.stdout.readline()
+count = 0
+for line in sub_proc.stdout:
+    if 'metrics-influxdb-mesos-tasks' in line and 'python' in line:
+        count += 1
+if count > 1:
+    print 'Exiting - script is already running'
+    exit(1)
+
+# Read InfluxDB connection details from config file
+parser = SafeConfigParser()
+try:
+   parser.read('/usr/local/etc/influxdb-mesos-tasks.config')
+   host = parser.get('db', 'host')
+   database = parser.get('db', 'database')
+   username = parser.get('auth', 'username')
+   password = parser.get('auth', 'password')
+except:
+   print 'Unable to read from config file'
+   sys.exit(1)
+
+try:
+   stats = requests.get('http://localhost:8080/api/v1.2/docker/',timeout=10).json()
+except:
+   print 'Unable to obtain cadvisor docker monitoring stats'
+   sys.exit(1)
+
+try:
+   state = requests.get('http://localhost:5051/state.json',timeout=10).json()
+except:
+   print 'Unable to obtain mesos state'
+   sys.exit(1)
+
+hostname = socket.gethostname()
+
+tasks = {}
+
+for framework in state["frameworks"]:
+   for executor in framework["executors"]:
+      count = 0
+      for task in executor['tasks']:
+         labelstr = ''
+         if 'labels' in task:
+            labels = task['labels']
+            for label in labels:
+               if len(labelstr) > 0:
+                  labelstr += ';'
+               labelstr += label['key'] + ':' + label['value']
+         count += 1
+         info = {}
+         info['name'] = task['name']
+         info['id'] = task['id']
+         info['labels'] = labelstr
+         tasks[executor['container']] = info
+      if count > 1:
+         print 'WARNING: multiple tasks in single executor'
+
+data = ''
+tasksPerApp = {}
+
+for container in stats:
+   info = stats[container]
+   isMesos = 0
+   for alias in info['aliases']:
+      if 'mesos' in alias:
+         myAlias = alias
+         isMesos = 1
+   if isMesos == 1:
+      containerId = myAlias.split('.')[1]
+      if containerId in tasks:
+         info = tasks[containerId]
+         statistics = stats[container]['stats']
+
+         if info['name'] in tasksPerApp:
+            tasksPerApp[info['name']] += 1
+         else:
+            tasksPerApp[info['name']] = 1
+
+         basic = 'app=' + info['name'] + \
+                 ',id=' + info['id'] + \
+                 ',host=' + hostname
+         if len(info['labels']) > 0:
+            basic += ',labels=' + info['labels']
+
+         if 'NO_METRICS' not in basic:
+            # Limits
+            data += 'mesos_task_limits,' + basic + \
+                    ' cpu=%d' % (stats[container]['spec']['cpu']['limit']) + \
+                    ',memory=%d' % (stats[container]['spec']['memory']['limit']) + \
+                    ',swap=%d' % (stats[container]['spec']['memory']['swap_limit']) + '\n'
+
+            data += 'mesos_num_tasks,' + basic + ' value=1\n'
+
+            for stime in statistics:
+               p = '%Y-%m-%dT%H:%M:%S'
+               epoch = datetime.fromtimestamp(0)
+               timestamp = "%d" % ((datetime.strptime(stime['timestamp'].split('.')[0], p) - epoch).total_seconds())
+
+               # Disk io
+               data += 'diskio,' + basic + \
+                       ' serviced_total=%d' % (stime['diskio']['io_serviced'][0]['stats']['Total']) + \
+                       ',serviced_read=%d' % (stime['diskio']['io_serviced'][0]['stats']['Read']) + \
+                       ',serviced_write=%d' % (stime['diskio']['io_serviced'][0]['stats']['Write']) + \
+                       ',serviced_sync=%d' % (stime['diskio']['io_serviced'][0]['stats']['Sync']) + \
+                       ',serviced_async=%d' % (stime['diskio']['io_serviced'][0]['stats']['Async']) + \
+                       ',service_bytes_total=%d' % (stime['diskio']['io_service_bytes'][0]['stats']['Total']) + \
+                       ',service_bytes_read=%d' % (stime['diskio']['io_service_bytes'][0]['stats']['Read']) + \
+                       ',service_bytes_write=%d' % (stime['diskio']['io_service_bytes'][0]['stats']['Write']) + \
+                       ',service_bytes_sync=%d' % (stime['diskio']['io_service_bytes'][0]['stats']['Sync']) + \
+                       ',service_bytes_async=%d' % (stime['diskio']['io_service_bytes'][0]['stats']['Async']) + ' ' + timestamp + '\n'
+
+               # Network
+               data += 'net,' + basic + \
+                       ' rx_bytes=%d' % (stime['network']['rx_bytes']) + \
+                       ',rx_packets=%d' % (stime['network']['rx_packets']) + \
+                       ',rx_errors=%d' % (stime['network']['rx_errors']) + \
+                       ',rx_dropped=%d' % (stime['network']['rx_dropped']) + \
+                       ',tx_bytes=%d' % (stime['network']['tx_bytes']) + \
+                       ',tx_packets=%d' % (stime['network']['tx_packets']) + \
+                       ',tx_errors=%d' % (stime['network']['tx_errors']) + \
+                       ',tx_dropped=%d' % (stime['network']['tx_dropped']) + ' ' + timestamp + '\n'
+
+               # Memory
+               data += 'memory,' + basic + \
+                       ' usage=%d' % (stime['memory']['usage']) + \
+                       ',cache=%d' % (stime['memory']['cache']) + \
+                       ',rss=%d' % (stime['memory']['rss']) + \
+                       ',working_set=%d' % (stime['memory']['working_set']) + ' ' + timestamp + '\n'
+
+               # CPU
+               data += 'cpu,' + basic + \
+                       ' total=%d' % (stime['cpu']['usage']['total']) + \
+                       ',system=%d' % (stime['cpu']['usage']['system']) + \
+                       ',user=%d' % (stime['cpu']['usage']['user']) + ' ' + timestamp + '\n'
+
+               # Custom metrics
+               if 'custom_metrics' in stime:
+                  data += 'custom_metrics,' + basic + ' '
+                  metrics = stime['custom_metrics']
+                  have = 0
+                  for metric in metrics:
+                     if have > 0:
+                        data += ','
+                     if 'float_value' in stime['custom_metrics'][metric][0]:
+                        data += metric + '=%f' % (stime['custom_metrics'][metric][0]['float_value'])
+                        have += 1
+                     elif 'int_value' in stime['custom_metrics'][metric][0]:
+                        data += metric + '=%d' % (stime['custom_metrics'][metric][0]['int_value'])
+                        have += 1
+                     else:
+                        have = 0
+                     
+                  data += ' ' + timestamp + '\n'
+
+# Send to InfluxDB
+try:
+   r = requests.post('http://' + host+ '/write?db=' + database + '&precision=s', auth=(username, password), data=data, timeout=40)
+   statuscode = r.status_code
+except:
+   print 'ERROR: Problem connecting to',host
+
