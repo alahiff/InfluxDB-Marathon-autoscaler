@@ -26,3 +26,6 @@ The metrics for the rule `requests` are obtained from the field `requests` from 
 A target value of `1000` averaged across all instances over the past `180s` is used. After scaling it backs off for at least `120s` - it can scale up again after `120s` but will only scale down after 480s (`120s` multiplied by `4`). This additional backoff time before downscaling is to ensure that the autoscaler won't scale up and down too frequently if the metric is varying frequently.
 
 Multiple rules can be specified for each application but in each iteration an application can only be scaled once and cannot be scaled again until the backoff time period expires.
+
+To do:
+* Add threshold-based rules
