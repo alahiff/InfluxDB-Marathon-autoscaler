@@ -15,7 +15,7 @@ Setup:
 * Setup a cron on each Mesos agent to run `/usr/local/bin/metrics-influxdb-mesos-tasks` every minute on each Mesos agent
 * Adjust the InfluxDB and Marathon connection details in `autoscaler/autoscaler.py` and run the script on a host with access to the Marathon API
 
-Environment variables are used in the Marathon application specification to specify autoscaling rules. Example environment variables:
+Environment variables are used in the Marathon application specification to specify autoscaling rules (Marathon labels are not used because they appear on the main page of the Marathon UI). Example environment variables:
 * "autoscale": "true"
 * "autoscale_min_instances": "2"
 * "autoscale_max_instances": "8"
