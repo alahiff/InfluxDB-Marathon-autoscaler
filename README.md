@@ -18,10 +18,10 @@ Environment variables are used in the Marathon application specification to spec
 * "autoscale": "true"
 * "autoscale_min_instances": "2"
 * "autoscale_max_instances": "8"
-* "autoscale_rule_memory": "memory | total | target | 1000 | 180 | 120 | 4"
+* "autoscale_rule_requests": "http | requests | target | 1000 | 180 | 120 | 4"
 
 In this example autoscaling is enabled with a minimum of 2 instances and maximum of 8 instances.
-The metrics for the rule `memory` are obtained from the field `total` from the `memory` measurement in the InfluxDB database.
+The metrics for the rule `requests` are obtained from the field `requests` from the `http` measurement in the InfluxDB database.
 A target value of `1000` averaged across all instances over the past `180s` is used. After scaling it backs off for at least `120s` - it can scale up again after `120s` but will only scale down after 480s (`120s` multiplied by `4`). This additional backoff time before downscaling is to ensure that the autoscaler won't scale up and down too frequently if the metric is varying frequently.
 
 Multiple rules can be specified for each application but in each iteration an application can only be scaled once and cannot be scaled again until the backoff time period expires.
