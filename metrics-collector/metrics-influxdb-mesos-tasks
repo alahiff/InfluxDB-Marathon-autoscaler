@@ -147,22 +147,15 @@ for container in stats:
 
                # Custom metrics
                if 'custom_metrics' in stime:
-                  data += 'custom_metrics,' + basic + ' '
+                  custom = []
                   metrics = stime['custom_metrics']
-                  have = 0
                   for metric in metrics:
-                     if have > 0:
-                        data += ','
                      if 'float_value' in stime['custom_metrics'][metric][0]:
-                        data += metric + '=%f' % (stime['custom_metrics'][metric][0]['float_value'])
-                        have += 1
+                        custom.append(metric + '=%f' % (stime['custom_metrics'][metric][0]['float_value']))
                      elif 'int_value' in stime['custom_metrics'][metric][0]:
-                        data += metric + '=%d' % (stime['custom_metrics'][metric][0]['int_value'])
-                        have += 1
-                     else:
-                        have = 0
-                     
-                  data += ' ' + timestamp + '\n'
+                        custom.append(metric + '=%d' % (stime['custom_metrics'][metric][0]['int_value']))
+                  if len(custom) > 0:
+                      data += 'custom_metrics,%s %s %s\n' % (basic, ','.join(custom), timestamp)
 
 # Send to InfluxDB
 try:
