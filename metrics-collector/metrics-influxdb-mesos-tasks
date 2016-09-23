@@ -51,13 +51,7 @@ for framework in state["frameworks"]:
    for executor in framework["executors"]:
       count = 0
       for task in executor['tasks']:
-         labelstr = ''
-         if 'labels' in task:
-            labels = task['labels']
-            for label in labels:
-               if len(labelstr) > 0:
-                  labelstr += ';'
-               labelstr += label['key'] + ':' + label['value']
+         labelstr = ';'.join(["%s:%s" % (l['key'], l['value']) for l in tasks.get('labels', [])])
          count += 1
          info = {}
          info['name'] = task['name']
@@ -65,7 +59,7 @@ for framework in state["frameworks"]:
          info['labels'] = labelstr
          tasks[executor['container']] = info
       if count > 1:
-         print 'WARNING: multiple tasks in single executor'
+         print 'WARNING: multiple tasks in single executor is not supported'
 
 data = ''
 tasksPerApp = {}
